@@ -30,11 +30,11 @@ impl fmt::Display for ErrorResponse {
     }
 }
 
-pub struct JwtMiddleware {
+pub struct Identity {
     pub user_id: String,
 }
 
-impl FromRequest for JwtMiddleware {
+impl FromRequest for Identity {
     type Error = ActixWebError;
     type Future = Ready<Result<Self, Self::Error>>;
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
@@ -75,7 +75,7 @@ impl FromRequest for JwtMiddleware {
         let user_id = claims.sub;
         req.extensions_mut().insert::<String>(user_id.clone());
 
-        ready(Ok(JwtMiddleware { user_id }))
+        ready(Ok(Identity { user_id }))
     }
 }
 
@@ -191,7 +191,7 @@ pub async fn login(body: web::Json<Creds>, data: web::Data<State>) -> impl Respo
 }
 
 #[get("/auth/logout")]
-pub async fn logout(_: JwtMiddleware) -> impl Responder {
+pub async fn logout(_: Identity) -> impl Responder {
     let cookie = Cookie::build("token", "")
         .path("/")
         .max_age(AWD::new(-1, 0))

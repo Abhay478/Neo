@@ -6,9 +6,9 @@ use neo4rs::*;
 use std::sync::Arc;
 use std::{env, io};
 
+mod actix_nt;
 mod auth_nt;
 mod neo_nt;
-mod actix_nt;
 
 async fn connect() -> Arc<Graph> {
     env::set_var("RUST_LOG", "debug");
@@ -17,15 +17,7 @@ async fn connect() -> Arc<Graph> {
     let uri = "127.0.0.1:7687";
     let unm = "neo4j";
     let pswd = "neo4jabhay";
-    Arc::new(
-        Graph::new(
-            &uri,
-            &unm,
-            &pswd,
-        )
-        .await
-        .unwrap(),
-    )
+    Arc::new(Graph::new(&uri, &unm, &pswd).await.unwrap())
 }
 
 #[get("/")]
@@ -58,14 +50,19 @@ impl Config {
 
 #[derive(Clone)]
 pub struct State {
-    graph: Arc<Graph>,
-    env: Config,
+    pub graph: Arc<Graph>,
+    pub env: Config,
 }
 
 impl State {
     async fn init() -> Self {
         let graph = connect().await;
-        graph.run(Query::new("create(q: Test {num: 2})".to_string())).await.unwrap();
+        graph
+            .run(Query::new("create constraint simple_graph_for_chats if not exists for (c:Chat) require c.members is unique".to_string()))
+            .await
+            .unwrap();
+
+        // graph.run(Query::new("create constraint doppleganger if not exists "))
         Self {
             graph,
             env: Config::init(),

@@ -1,10 +1,10 @@
 use core::panic;
-use std::{error::Error, sync::Arc, todo, println, dbg};
+use std::{assert_eq, dbg, error::Error, println, sync::Arc, todo};
 
-use neo4rs::{Graph, Query, Path};
+use neo4rs::{Graph, Path, Query};
 use serde_derive::{Deserialize, Serialize};
 
-use crate::auth_nt::Creds;
+use crate::auth_nt::{Creds, Identity};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Account {
@@ -22,8 +22,15 @@ pub async fn dupe_acc(db: &Arc<Graph>, uu: &str) -> bool {
         )
         .await;
     match c {
-        Ok(mut rs) => {let row = rs.next().await.unwrap(); dbg!(&row); row.unwrap().get::<i64>("count").unwrap() != 0},
-        Err(e) => {println!("{}", e.to_string()); panic!("")},
+        Ok(mut rs) => {
+            let row = rs.next().await.unwrap();
+            dbg!(&row);
+            row.unwrap().get::<i64>("count").unwrap() != 0
+        }
+        Err(e) => {
+            println!("{}", e.to_string());
+            panic!("")
+        }
     }
 }
 
@@ -57,14 +64,15 @@ pub async fn makeme(db: &Arc<Graph>, new: Creds) -> Result<Account, neo4rs::Erro
     match rs {
         Some(cr) => {
             let x = &cr.get::<Path>("x").unwrap().nodes()[0];
-            
+
             Ok(Account {
-            obj: x.get("id").unwrap(),
-            creds: Creds {
-                username: x.get("username").unwrap(),
-                password: x.get("password").unwrap(),
-            },
-        })},
+                obj: x.get("id").unwrap(),
+                creds: Creds {
+                    username: x.get("username").unwrap(),
+                    password: x.get("password").unwrap(),
+                },
+            })
+        }
         None => Err(neo4rs::Error::UnexpectedMessage("Ayo wut.".to_string())),
     }
 }
@@ -96,19 +104,52 @@ pub async fn get_account(db: &Arc<Graph>, username: &str) -> Result<Account, neo
 /// Application specific
 pub struct Database;
 
+use chrono::Utc;
 pub mod models {
     use chrono::Utc;
+    use serde_derive::{Deserialize, Serialize};
 
-    pub struct Message{
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Message {
         from: String,
         to: String,
         body: String,
-        time: chrono::DateTime<Utc>
+        time: String, // chrono::DateTime<Utc> does not derive Serde. Sigh.
     }
 }
 /// To write a new application, just comment this impl out.
 /// So this one is a social networking app (?)
 impl Database {
+    pub async fn open_chat(
+        db: &Arc<Graph>,
+        me: String, // comes from Identity.user_id *only*
+        them: String,
+    ) -> Result<(), neo4rs::Error> {
+        db.run(
+            Query::new(
+                "match (me:Account {id:$i}) match (them: Account {username:$u}) create (me) -[:Member]-> (c:Chat {members:[$i, them.id]}) <-[:Member]- (them)".to_string()
+            )
+            .param("i", me)
+            .param("u", them)
+        )
+        .await
+    }
 
-    pub async fn send_msg()
+    pub async fn send_msg(
+        db: &Arc<Graph>,
+        me: String, // comes from Identity.user_id *only*
+        them: String,
+        body: String,
+    ) -> Result<(), neo4rs::Error> {
+        db.run(
+            Query::new(
+                "match (from: Account {id:$f}) -[:Member]-> (c: Chat) <-[:Member]- (to: Account {username:$t}) create (c) -[:Data]-> (:Message {from:$f, to:$t, body:$b, time:$t})".to_string()
+            )
+            .param("f", me)
+            .param("t", them)
+            .param("b", body)
+            .param("ti", chrono::offset::Utc::now().to_string())
+        )
+        .await
+    }
 }

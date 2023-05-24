@@ -1,19 +1,147 @@
-use core::fmt;
-use std::future::{ready, Ready};
-
-// use crate::diesel_ch::{dupe_acc, get_creds, makeme, Creds};
-use crate::neo_nt::{dupe_acc, get_account, makeme};
 use crate::State;
 use actix_web::error::ErrorUnauthorized;
+use actix_web::{
+    cookie::{time::Duration as AWD, Cookie},
+    get, post, HttpResponse, Responder,
+};
 use actix_web::{dev::Payload, Error as ActixWebError};
 use actix_web::{http, web, FromRequest, HttpMessage, HttpRequest};
-
+use argon2::{
+    password_hash::{PasswordHash, PasswordVerifier},
+    Argon2,
+};
+use chrono::{prelude::*, Duration};
+use core::fmt;
 use jsonwebtoken::{decode, DecodingKey, Validation};
+use jsonwebtoken::{encode, EncodingKey, Header};
+use neo4rs::{Graph, Node, Path, Query};
 use serde_derive::{Deserialize, Serialize};
+use serde_json::json;
+use std::future::{ready, Ready};
+use std::str::FromStr;
+use std::sync::Arc;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Account {
+    pub obj: String,
+    pub creds: Creds,
+}
+
+pub async fn dupe_acc(db: &Arc<Graph>, uu: &str) -> bool {
+    let c = db
+        .execute(
+            Query::new(
+                "match (acc:Account {username:$unm}) return count(acc) as count".to_string(),
+            )
+            .param("unm", uu),
+        )
+        .await;
+    match c {
+        Ok(mut rs) => {
+            let row = rs.next().await.unwrap();
+            dbg!(&row);
+            row.unwrap().get::<i64>("count").unwrap() != 0
+        }
+        Err(e) => {
+            println!("{}", e.to_string());
+            panic!("")
+        }
+    }
+}
+
+pub fn hash(s: &str) -> String {
+    use argon2::{
+        password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+        Argon2,
+    };
+    let salt = SaltString::generate(&mut OsRng);
+    Argon2::default()
+        .hash_password(s.as_bytes(), &salt)
+        .expect("Error while hashing password")
+        .to_string()
+}
+
+pub async fn makeme(db: &Arc<Graph>, new: Creds) -> Result<Account, neo4rs::Error> {
+    let mut c = db
+        .execute(
+            Query::new(
+                "create x = (:Account {id:$obj, username:$unm, password:$pswd, auth:'Subscriber'}) return x"
+                    .to_string(),
+            )
+            .param("obj", uuid::Uuid::new_v4().to_string())
+            .param("unm", new.username)
+            .param("pswd", hash(&*new.password)),
+        )
+        .await?;
+
+    let rs = c.next().await?;
+    dbg!(&rs);
+    match rs {
+        Some(cr) => {
+            let x = &cr.get::<Path>("x").unwrap().nodes()[0];
+
+            Ok(Account {
+                obj: x.get("id").unwrap(),
+                creds: Creds {
+                    username: x.get("username").unwrap(),
+                    password: x.get("password").unwrap(),
+                    auth: (&*x.get::<String>("auth").unwrap()).into(),
+                },
+            })
+        }
+        None => Err(neo4rs::Error::UnexpectedMessage("Ayo wut.".to_string())),
+    }
+}
+
+pub async fn get_account(db: &Arc<Graph>, username: &str) -> Result<Account, neo4rs::Error> {
+    let mut c = db
+        .execute(
+            Query::new("match (a:Account {username:$unm}) return a".to_string())
+                .param("unm", username),
+        )
+        .await?;
+
+    let rs = c.next().await?;
+    match rs {
+        Some(row) => {
+            let x = row.get::<Node>("a").unwrap();
+            Ok(Account {
+                obj: x.get("obj").unwrap(),
+                creds: Creds {
+                    username: x.get("username").unwrap(),
+                    password: x.get("password").unwrap(),
+                    auth: (&*x.get::<String>("auth").unwrap()).into(),
+                },
+            })
+        }
+        None => Err(neo4rs::Error::AuthenticationError("..".to_string())),
+    }
+    // todo!()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+/// Will have to add intermediate authorities, obviously.
+pub enum Authority {
+    Unknown,
+    Subscriber,
+    Admin,
+}
+
+impl From<&str> for Authority {
+    // type Err = neo4rs::Error;
+    fn from(s: &str) -> Self {
+        match s {
+            "Subscriber" => Self::Subscriber,
+            "Admin" => Self::Admin,
+            _ => Self::Unknown,
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TokenClaims {
     pub sub: String,
+    pub auth: Authority,
     pub iat: usize,
     pub exp: usize,
 }
@@ -32,6 +160,7 @@ impl fmt::Display for ErrorResponse {
 
 pub struct Identity {
     pub user_id: String,
+    pub auth: Authority,
 }
 
 impl FromRequest for Identity {
@@ -73,28 +202,18 @@ impl FromRequest for Identity {
         };
 
         let user_id = claims.sub;
+        let auth = claims.auth;
         req.extensions_mut().insert::<String>(user_id.clone());
 
-        ready(Ok(Identity { user_id }))
+        ready(Ok(Identity { user_id, auth }))
     }
 }
-
-use actix_web::{
-    cookie::{time::Duration as AWD, Cookie},
-    get, post, HttpResponse, Responder,
-};
-use argon2::{
-    password_hash::{PasswordHash, PasswordVerifier},
-    Argon2,
-};
-use chrono::{prelude::*, Duration};
-use jsonwebtoken::{encode, EncodingKey, Header};
-use serde_json::json;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Creds {
     pub username: String,
     pub password: String,
+    pub auth: Authority,
 }
 
 #[post("/auth/register")]
@@ -115,7 +234,7 @@ pub async fn register(mut body: web::Json<Creds>, data: web::Data<State>) -> imp
 
     match res {
         Ok(user) => {
-            let token = get_token(&user.obj.to_string(), data);
+            let token = get_token(&user.obj.to_string(), data, user.creds.auth);
 
             let cookie = Cookie::build("token", token.to_owned())
                 .path("/")
@@ -129,12 +248,13 @@ pub async fn register(mut body: web::Json<Creds>, data: web::Data<State>) -> imp
     }
 }
 
-fn get_token(id: &str, data: web::Data<State>) -> String {
+fn get_token(id: &str, data: web::Data<State>, auth: Authority) -> String {
     let now = Utc::now();
     let iat = now.timestamp() as usize;
     let exp = (now + Duration::minutes(60)).timestamp() as usize;
     let claims = TokenClaims {
         sub: id.to_string(),
+        auth,
         exp,
         iat,
     };
@@ -177,7 +297,7 @@ pub async fn login(body: web::Json<Creds>, data: web::Data<State>) -> impl Respo
 
     let user = query_result.unwrap();
 
-    let token = get_token(&user.obj, data);
+    let token = get_token(&user.obj, data, user.creds.auth);
 
     let cookie = Cookie::build("token", token.to_owned())
         .path("/")

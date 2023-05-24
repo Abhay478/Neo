@@ -3,6 +3,7 @@ use actix_web::web::Data;
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
 use auth_nt::*;
 use neo4rs::*;
+use neo_nt::Database;
 use std::sync::Arc;
 use std::{env, io};
 
@@ -57,15 +58,7 @@ pub struct State {
 impl State {
     async fn init() -> Self {
         let graph = connect().await;
-        graph
-            .run(
-                Query::new(
-                    "create constraint simple_graph_for_subs if not exists for (: Account) -[f: follows]-> (: Topic) require f is unique"
-                        .to_string()
-                )
-            )
-            .await
-            .unwrap();
+        Database::constraints(&graph).await;
 
         // graph.run(Query::new("create constraint doppleganger if not exists "))
         Self {

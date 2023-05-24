@@ -5,8 +5,6 @@ use neo4rs::{Graph, Path, Query};
 
 use crate::auth_nt::{Authority, Creds, Identity};
 
-
-
 pub mod models {
     use serde_derive::{Deserialize, Serialize};
 
@@ -171,5 +169,4 @@ impl Database {
         }
         // todo!()
     }
-
 }

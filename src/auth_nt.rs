@@ -18,7 +18,6 @@ use neo4rs::{Graph, Node, Path, Query};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
 use std::future::{ready, Ready};
-use std::str::FromStr;
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -50,10 +49,7 @@ pub async fn dupe_acc(db: &Arc<Graph>, uu: &str) -> bool {
 }
 
 pub fn hash(s: &str) -> String {
-    use argon2::{
-        password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
-        Argon2,
-    };
+    use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
     let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
         .hash_password(s.as_bytes(), &salt)

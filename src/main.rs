@@ -58,7 +58,12 @@ impl State {
     async fn init() -> Self {
         let graph = connect().await;
         graph
-            .run(Query::new("create constraint simple_graph_for_chats if not exists for (c:Chat) require c.members is unique".to_string()))
+            .run(
+                Query::new(
+                    "create constraint simple_graph_for_subs if not exists for (: Account) -[f: follows]-> (: Topic) require f is unique"
+                        .to_string()
+                )
+            )
             .await
             .unwrap();
 

@@ -2,12 +2,10 @@ use core::panic;
 use std::{assert_eq, dbg, error::Error, println, sync::Arc, todo};
 
 use neo4rs::{Graph, Path, Query};
-// use serde_derive::{Deserialize, Serialize};
 
 use crate::auth_nt::{Authority, Creds, Identity};
 
-/// Application specific
-pub struct Database;
+
 
 pub mod models {
     use serde_derive::{Deserialize, Serialize};
@@ -56,6 +54,9 @@ pub mod models {
         pub topic: Topic,
     }
 }
+
+/// Application specific
+pub struct Database;
 
 /// To write a new application, just comment this impl out.
 impl Database {

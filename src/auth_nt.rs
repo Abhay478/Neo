@@ -1,3 +1,4 @@
+use crate::neo_nt::Database;
 use crate::State;
 use actix_web::error::ErrorUnauthorized;
 use actix_web::{
@@ -26,14 +27,16 @@ pub struct Account {
     pub creds: Creds,
 }
 
+/// Maybe more fields, like #topics subscribed to, active_since?
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct User {
+    pub username: String,
+    pub disp_name: String,
+}
+
 pub async fn dupe_acc(db: &Arc<Graph>, uu: &str) -> bool {
     let c = db
-        .execute(
-            Query::new(
-                "match (acc:Account {username:$unm}) return count(acc) as count".to_string(),
-            )
-            .param("unm", uu),
-        )
+        .execute(Query::new(Database::read_query("dupe_acc")).param("unm", uu))
         .await;
     match c {
         Ok(mut rs) => {
@@ -60,13 +63,11 @@ pub fn hash(s: &str) -> String {
 pub async fn makeme(db: &Arc<Graph>, new: Creds) -> Result<Account, neo4rs::Error> {
     let mut c = db
         .execute(
-            Query::new(
-                "create x = (:Account {id:$obj, username:$unm, password:$pswd, auth:'Subscriber'}) return x"
-                    .to_string(),
-            )
-            .param("obj", uuid::Uuid::new_v4().to_string())
-            .param("unm", new.username)
-            .param("pswd", hash(&*new.password)),
+            Query::new(Database::read_query("makeme"))
+                .param("obj", uuid::Uuid::new_v4().to_string())
+                .param("unm", new.username)
+                .param("pswd", hash(&*new.password))
+                .param("dnm", new.disp_name),
         )
         .await?;
 
@@ -81,6 +82,7 @@ pub async fn makeme(db: &Arc<Graph>, new: Creds) -> Result<Account, neo4rs::Erro
                 creds: Creds {
                     username: x.get("username").unwrap(),
                     password: x.get("password").unwrap(),
+                    disp_name: x.get("disp_name").unwrap(),
                     auth: (&*x.get::<String>("auth").unwrap()).into(),
                 },
             })
@@ -91,10 +93,7 @@ pub async fn makeme(db: &Arc<Graph>, new: Creds) -> Result<Account, neo4rs::Erro
 
 pub async fn get_account(db: &Arc<Graph>, username: &str) -> Result<Account, neo4rs::Error> {
     let mut c = db
-        .execute(
-            Query::new("match (a:Account {username:$unm}) return a".to_string())
-                .param("unm", username),
-        )
+        .execute(Query::new(Database::read_query("get_account")).param("unm", username))
         .await?;
 
     let rs = c.next().await?;
@@ -106,6 +105,7 @@ pub async fn get_account(db: &Arc<Graph>, username: &str) -> Result<Account, neo
                 creds: Creds {
                     username: x.get("username").unwrap(),
                     password: x.get("password").unwrap(),
+                    disp_name: x.get("disp_name").unwrap(),
                     auth: (&*x.get::<String>("auth").unwrap()).into(),
                 },
             })
@@ -209,6 +209,7 @@ impl FromRequest for Identity {
 pub struct Creds {
     pub username: String,
     pub password: String,
+    pub disp_name: String,
     pub auth: Authority,
 }
 

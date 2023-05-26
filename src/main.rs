@@ -1,7 +1,9 @@
-use actix_web::middleware::Logger;
+use actix_web::middleware::{Compress, Logger};
 use actix_web::web::Data;
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
+use async_graphql::Schema;
 use auth_nt::*;
+use graphql_nt::{Mutation, Query, Subscription};
 use neo4rs::*;
 use neo_nt::Database;
 use std::sync::Arc;
@@ -9,15 +11,20 @@ use std::{env, io};
 
 mod actix_nt;
 mod auth_nt;
+mod graphql_nt;
 mod neo_nt;
 
 async fn connect() -> Arc<Graph> {
     env::set_var("RUST_LOG", "debug");
     dotenvy::dotenv().ok();
     env_logger::init();
-    let uri = "127.0.0.1:7687";
-    let unm = "neo4j";
-    let pswd = "neo4jabhay";
+    // let uri = "127.0.0.1:7687";
+    let uri = env::var("DATABASE_URI").unwrap();
+    // let unm = "neo4j";
+    let unm = env::var("USERNAME").unwrap();
+    // let pswd = "neo4jabhay";
+    let pswd = env::var("PASSWORD").unwrap();
+
     Arc::new(Graph::new(&uri, &unm, &pswd).await.unwrap())
 }
 
@@ -60,7 +67,6 @@ impl State {
         let graph = connect().await;
         Database::constraints(&graph).await;
 
-        // graph.run(Query::new("create constraint doppleganger if not exists "))
         Self {
             graph,
             env: Config::init(),
@@ -71,10 +77,15 @@ impl State {
 #[actix_web::main]
 async fn main() -> io::Result<()> {
     let state = State::init().await;
+    let schema = Schema::build(Query, Mutation, Subscription)
+        .data(state.clone())
+        .finish();
     HttpServer::new(move || {
         App::new()
             .app_data(Data::new(state.clone()))
+            .app_data(Data::new(schema.clone()))
             .wrap(Logger::default())
+            .wrap(Compress::default())
             .service(api)
             .service(register)
             .service(login)
@@ -83,5 +94,4 @@ async fn main() -> io::Result<()> {
     .bind("localhost:8080")?
     .run()
     .await
-    // Ok(())
 }

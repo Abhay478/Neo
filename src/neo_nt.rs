@@ -3,9 +3,9 @@
 use core::panic;
 use std::{assert_eq, dbg, error::Error, println, sync::Arc, todo};
 
-use neo4rs::{Graph, Path, Query, RowStream, Node};
+use neo4rs::{Graph, Node, Path, Query, RowStream};
 
-use crate::auth_nt::{Authority, Creds, Identity};
+use crate::auth_nt::{Authority, Creds, Identity, User};
 
 pub mod models {
     use serde_derive::{Deserialize, Serialize};
@@ -214,6 +214,7 @@ impl Database {
         Ok(())
     }
 
+    /// Returns all the topics you're subscribed to. Subscription types be?
     pub async fn get_topics(db: &Arc<Graph>, me: String) -> NeoResult<Vec<models::Topic>> {
         let mut rs = db
             .execute(Query::new(Self::read_query("get_topics")).param("me", me))
@@ -225,11 +226,29 @@ impl Database {
             let node = row.get::<Node>("t").unwrap();
             out.push(models::Topic {
                 id: node.get("id").unwrap(),
-                name: node.get("name").unwrap()
+                name: node.get("name").unwrap(),
             });
         }
 
         Ok(out)
+    }
+
+    /// Admin
+    pub async fn get_subscribers(db: &Arc<Graph>, topic: String) -> NeoResult<Vec<User>> {
+        let mut rs = db
+            .execute(Query::new(Self::read_query("get_subscribers")).param("id", topic))
+            .await?;
+        let mut out = vec![];
+        while let Ok(Some(row)) = rs.next().await {
+            let node = row.get::<Node>("t").unwrap();
+            out.push(User {
+                username: node.get("username").unwrap(),
+                disp_name: node.get("disp_name").unwrap(),
+            });
+        }
+
+        Ok(out)
+
         // todo!()
     }
 }

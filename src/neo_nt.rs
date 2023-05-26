@@ -19,6 +19,19 @@ pub mod models {
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Page {
+        pub id: String,
+        pub body: Frame,
+        pub time: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    /// Add more fields?
+    pub struct Frame {
+        pub title: String,
+        pub body: String,
+    }
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     /// For now, only so many fields. May add more.
     pub struct Topic {
         pub id: String,
@@ -45,7 +58,7 @@ pub mod models {
     pub struct Service {
         pub id: String, // uuid
         pub typ: ServiceType,
-        pub topic: Topic,
+        pub topic: Topic, // debating whether or not to remove this, so the service doesn't really know it's topic. We aren't using this field anywhere, ig.
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,6 +262,37 @@ impl Database {
 
         Ok(out)
 
+        // todo!()
+    }
+
+    /// New Authority called Service, let those login too, and call this function to post to a topic.
+    pub async fn publish(
+        db: &Arc<Graph>,
+        serv: models::Service,
+        page: models::Frame,
+    ) -> Result<models::Page, neo4rs::Error> {
+        let mut rs = db
+            .execute(
+                Query::new(Self::read_query("publish"))
+                    .param("sid", serv.id)
+                    .param("title", page.title)
+                    .param("pid", uuid::Uuid::new_v4().to_string())
+                    .param("body", page.body)
+                    .param("time", chrono::offset::Utc::now().to_string()),
+            )
+            .await?;
+
+        let row = rs.next().await?.unwrap();
+        let x = row.get::<Path>("x").unwrap();
+        let entry = &x.nodes()[0];
+        Ok(models::Page {
+            id: entry.get("id").unwrap(),
+            body: models::Frame {
+                title: entry.get("title").unwrap(),
+                body: entry.get("body").unwrap(),
+            },
+            time: entry.get("time").unwrap(),
+        })
         // todo!()
     }
 }

@@ -18,6 +18,7 @@ use jsonwebtoken::{encode, EncodingKey, Header};
 use neo4rs::{Graph, Node, Path, Query};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
+use std::fmt::Display;
 use std::future::{ready, Ready};
 use std::sync::Arc;
 
@@ -67,7 +68,8 @@ pub async fn makeme(db: &Arc<Graph>, new: Creds) -> Result<Account, neo4rs::Erro
                 .param("obj", uuid::Uuid::new_v4().to_string())
                 .param("unm", new.username)
                 .param("pswd", hash(&*new.password))
-                .param("dnm", new.disp_name),
+                .param("dnm", new.disp_name)
+                .param("auth", new.auth.to_string()),
         )
         .await?;
 
@@ -120,6 +122,7 @@ pub async fn get_account(db: &Arc<Graph>, username: &str) -> Result<Account, neo
 pub enum Authority {
     Unknown,
     Subscriber,
+    Service,
     Admin,
 }
 
@@ -129,7 +132,19 @@ impl From<&str> for Authority {
         match s {
             "Subscriber" => Self::Subscriber,
             "Admin" => Self::Admin,
+            "Service" => Self::Service,
             _ => Self::Unknown,
+        }
+    }
+}
+
+impl Display for Authority {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
+            Self::Admin => write!(f, "Admin"),
+            Self::Service => write!(f, "Service"),
+            Self::Subscriber => write!(f, "Subscriber"),
+            Self::Unknown => write!(f, "Unknown"),
         }
     }
 }

@@ -12,30 +12,11 @@ use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse, GraphQLSubscripti
 // use juniper_graphql_ws::ConnectionConfig;
 
 use crate::{
-    auth_nt::Identity,
+    auth_nt::models::Identity,
     graphql_nt::{Mutation, Query, Subscription},
-    neo_nt::Database,
+    neo_nt::handlers::Database,
     State,
 };
-
-// #[post("/messages/{them}")]
-// pub async fn send_msg(ctx: Data<State>, me: Identity, them: Path<String>, body: Json<String>) -> impl Responder {
-//     let q = Database::send_msg(&ctx.graph, me.user_id, them.to_string(), body.to_string()).await;
-//     match q {
-//         Ok(()) => HttpResponse::Ok().json("sent"),
-//         Err(e) => HttpResponse::NotAcceptable().json(e.to_string())
-//     }
-// }
-
-// #[post("/chats/{them}")]
-// pub async fn open_chat(ctx: Data<State>, me: Identity, them: Path<String>) -> impl Responder {
-//     let q = Database::open_chat(&ctx.graph, me.user_id, them.to_string()).await;
-//     match q {
-//         Ok(()) => HttpResponse::Ok().json("opened"),
-//         Err(e) => HttpResponse::NotAcceptable().json(e.to_string())
-//     }
-// }
-// type Schema = RootNode<'static, Query, Mutation, Subscription>;
 
 type Sch = Schema<Query, Mutation, Subscription>;
 

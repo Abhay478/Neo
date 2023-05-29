@@ -2,10 +2,10 @@ use actix_web::middleware::{Compress, Logger};
 use actix_web::web::Data;
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
 use async_graphql::Schema;
-use auth_nt::*;
+use auth_nt::handlers::*;
 use graphql_nt::{Mutation, Query, Subscription};
 use neo4rs::*;
-use neo_nt::Database;
+use neo_nt::handlers::Database;
 use std::sync::Arc;
 use std::{env, io};
 

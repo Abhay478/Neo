@@ -1,2 +1,2 @@
-match (:Topic {id:$id}) <-[:follows]- (s: Account)
+match (:Topic {id: $id}) <-[:follows]- (s: Account)
 return s

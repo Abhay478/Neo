@@ -1,39 +1,4 @@
-use crate::neo_nt::Database;
-use crate::State;
-use actix_web::error::ErrorUnauthorized;
-use actix_web::{
-    cookie::{time::Duration as AWD, Cookie},
-    get, post, HttpResponse, Responder,
-};
-use actix_web::{dev::Payload, Error as ActixWebError};
-use actix_web::{http, web, FromRequest, HttpMessage, HttpRequest};
-use argon2::{
-    password_hash::{PasswordHash, PasswordVerifier},
-    Argon2,
-};
-use chrono::{prelude::*, Duration};
-use core::fmt;
-use jsonwebtoken::{decode, DecodingKey, Validation};
-use jsonwebtoken::{encode, EncodingKey, Header};
-use neo4rs::{Graph, Node, Path, Query};
-use serde_derive::{Deserialize, Serialize};
-use serde_json::json;
-use std::fmt::Display;
-use std::future::{ready, Ready};
-use std::sync::Arc;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Account {
-    pub obj: String,
-    pub creds: Creds,
-}
-
-/// Maybe more fields, like #topics subscribed to, active_since?
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct User {
-    pub username: String,
-    pub disp_name: String,
-}
+use super::*;
 
 pub async fn dupe_acc(db: &Arc<Graph>, uu: &str) -> bool {
     let c = db
@@ -61,7 +26,7 @@ pub fn hash(s: &str) -> String {
         .to_string()
 }
 
-pub async fn makeme(db: &Arc<Graph>, new: Creds) -> Result<Account, neo4rs::Error> {
+pub async fn makeme(db: &Arc<Graph>, new: models::Creds) -> Result<models::Account, neo4rs::Error> {
     let mut c = db
         .execute(
             Query::new(Database::read_query("makeme"))
@@ -79,9 +44,9 @@ pub async fn makeme(db: &Arc<Graph>, new: Creds) -> Result<Account, neo4rs::Erro
         Some(cr) => {
             let x = &cr.get::<Path>("x").unwrap().nodes()[0];
 
-            Ok(Account {
+            Ok(models::Account {
                 obj: x.get("id").unwrap(),
-                creds: Creds {
+                creds: models::Creds {
                     username: x.get("username").unwrap(),
                     password: x.get("password").unwrap(),
                     disp_name: x.get("disp_name").unwrap(),
@@ -93,7 +58,10 @@ pub async fn makeme(db: &Arc<Graph>, new: Creds) -> Result<Account, neo4rs::Erro
     }
 }
 
-pub async fn get_account(db: &Arc<Graph>, username: &str) -> Result<Account, neo4rs::Error> {
+pub async fn get_account(
+    db: &Arc<Graph>,
+    username: &str,
+) -> Result<models::Account, neo4rs::Error> {
     let mut c = db
         .execute(Query::new(Database::read_query("get_account")).param("unm", username))
         .await?;
@@ -102,9 +70,9 @@ pub async fn get_account(db: &Arc<Graph>, username: &str) -> Result<Account, neo
     match rs {
         Some(row) => {
             let x = row.get::<Node>("a").unwrap();
-            Ok(Account {
+            Ok(models::Account {
                 obj: x.get("obj").unwrap(),
-                creds: Creds {
+                creds: models::Creds {
                     username: x.get("username").unwrap(),
                     password: x.get("password").unwrap(),
                     disp_name: x.get("disp_name").unwrap(),
@@ -117,119 +85,11 @@ pub async fn get_account(db: &Arc<Graph>, username: &str) -> Result<Account, neo
     // todo!()
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
-/// Will have to add intermediate authorities, obviously.
-pub enum Authority {
-    Unknown,
-    Subscriber,
-    Service,
-    Admin,
-}
-
-impl From<&str> for Authority {
-    // type Err = neo4rs::Error;
-    fn from(s: &str) -> Self {
-        match s {
-            "Subscriber" => Self::Subscriber,
-            "Admin" => Self::Admin,
-            "Service" => Self::Service,
-            _ => Self::Unknown,
-        }
-    }
-}
-
-impl Display for Authority {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self {
-            Self::Admin => write!(f, "Admin"),
-            Self::Service => write!(f, "Service"),
-            Self::Subscriber => write!(f, "Subscriber"),
-            Self::Unknown => write!(f, "Unknown"),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TokenClaims {
-    pub sub: String,
-    pub auth: Authority,
-    pub iat: usize,
-    pub exp: usize,
-}
-
-#[derive(Debug, Serialize)]
-struct ErrorResponse {
-    status: String,
-    message: String,
-}
-
-impl fmt::Display for ErrorResponse {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", serde_json::to_string(&self).unwrap())
-    }
-}
-
-pub struct Identity {
-    pub user_id: String,
-    pub auth: Authority,
-}
-
-impl FromRequest for Identity {
-    type Error = ActixWebError;
-    type Future = Ready<Result<Self, Self::Error>>;
-    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        let data = req.app_data::<web::Data<State>>().unwrap();
-
-        let token = req
-            .cookie("token")
-            .map(|c| c.value().to_string())
-            .or_else(|| {
-                req.headers()
-                    .get(http::header::AUTHORIZATION)
-                    .map(|h| h.to_str().unwrap().split_at(7).1.to_string())
-            });
-
-        if token.is_none() {
-            let json_error = ErrorResponse {
-                status: "fail".to_string(),
-                message: "Roses are red,\n violets are blue,\n please enter your credentials,\n we'd love to have you.".to_string(),
-            };
-            return ready(Err(ErrorUnauthorized(json_error)));
-        }
-
-        let claims = match decode::<TokenClaims>(
-            &token.unwrap(),
-            &DecodingKey::from_secret(data.env.jwt_secret.as_ref()),
-            &Validation::default(),
-        ) {
-            Ok(c) => c.claims,
-            Err(_) => {
-                let json_error = ErrorResponse {
-                    status: "fail".to_string(),
-                    message: "I find your lack of faith...disturbing".to_string(),
-                };
-                return ready(Err(ErrorUnauthorized(json_error)));
-            }
-        };
-
-        let user_id = claims.sub;
-        let auth = claims.auth;
-        req.extensions_mut().insert::<String>(user_id.clone());
-
-        ready(Ok(Identity { user_id, auth }))
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Creds {
-    pub username: String,
-    pub password: String,
-    pub disp_name: String,
-    pub auth: Authority,
-}
-
 #[post("/auth/register")]
-pub async fn register(mut body: web::Json<Creds>, data: web::Data<State>) -> impl Responder {
+pub async fn register(
+    mut body: web::Json<models::Creds>,
+    data: web::Data<State>,
+) -> impl Responder {
     let db = &data.graph;
     let exists = dupe_acc(db, &body.username).await;
     if exists {
@@ -260,11 +120,11 @@ pub async fn register(mut body: web::Json<Creds>, data: web::Data<State>) -> imp
     }
 }
 
-fn get_token(id: &str, data: web::Data<State>, auth: Authority) -> String {
+fn get_token(id: &str, data: web::Data<State>, auth: models::Authority) -> String {
     let now = Utc::now();
     let iat = now.timestamp() as usize;
     let exp = (now + Duration::minutes(60)).timestamp() as usize;
-    let claims = TokenClaims {
+    let claims = models::TokenClaims {
         sub: id.to_string(),
         auth,
         exp,
@@ -280,7 +140,7 @@ fn get_token(id: &str, data: web::Data<State>, auth: Authority) -> String {
 }
 
 #[post("/auth/login")]
-pub async fn login(body: web::Json<Creds>, data: web::Data<State>) -> impl Responder {
+pub async fn login(body: web::Json<models::Creds>, data: web::Data<State>) -> impl Responder {
     let db = &data.graph;
 
     let query_result = get_account(db, &*body.username).await;
@@ -323,7 +183,7 @@ pub async fn login(body: web::Json<Creds>, data: web::Data<State>) -> impl Respo
 }
 
 #[get("/auth/logout")]
-pub async fn logout(_: Identity) -> impl Responder {
+pub async fn logout(_: models::Identity) -> impl Responder {
     let cookie = Cookie::build("token", "")
         .path("/")
         .max_age(AWD::new(-1, 0))

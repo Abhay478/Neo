@@ -1,73 +1,4 @@
-#![allow(unused_imports)]
-#![allow(dead_code)]
-use core::panic;
-use std::{assert_eq, dbg, error::Error, println, sync::Arc, todo};
-
-use neo4rs::{Graph, Node, Path, Query, RowStream};
-
-use crate::auth_nt::{Authority, Creds, Identity, User};
-
-pub mod models {
-    use serde_derive::{Deserialize, Serialize};
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Message {
-        from: String,
-        to: String,
-        body: String,
-        time: String, // chrono::DateTime<Utc> does not derive Serde. Sigh.
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Page {
-        pub id: String,
-        pub body: Frame,
-        pub time: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    /// Add more fields?
-    pub struct Frame {
-        pub title: String,
-        pub body: String,
-    }
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    /// For now, only so many fields. May add more.
-    pub struct Topic {
-        pub id: String,
-        pub name: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    /// Obviously have to add more types.
-    pub enum ServiceType {
-        Unknown,
-        Eh,
-    }
-
-    impl From<&str> for ServiceType {
-        fn from(value: &str) -> Self {
-            match value {
-                "eh" => Self::Eh,
-                _ => Self::Unknown,
-            }
-        }
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Service {
-        pub id: String, // uuid
-        pub typ: ServiceType,
-        pub topic: Topic, // debating whether or not to remove this, so the service doesn't really know it's topic. We aren't using this field anywhere, ig.
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct Subscription {
-        pub id: String,   // uuid
-        pub user: String, // different uuid.
-        pub topic: Topic,
-    }
-}
+use super::*;
 
 /// Application specific
 pub struct Database;
@@ -100,6 +31,7 @@ impl Database {
     pub async fn new_service(
         db: &Arc<Graph>,
         me: Identity,
+        typ: models::ServiceType,
         // topic name
         topic: String,
     ) -> NeoResult<self::models::Service> {
@@ -114,7 +46,8 @@ impl Database {
             .execute(
                 Query::new(Self::read_query("new_service"))
                     .param("sid", uuid::Uuid::new_v4().to_string())
-                    .param("tname", topic.clone()),
+                    .param("tname", topic.clone())
+                    .param("typ", typ.to_string()),
             )
             .await?;
 
@@ -194,16 +127,7 @@ impl Database {
         })
     }
 
-    /// Remove the entire function - this is just in case dev wants to run an arbitrary query.
-    pub async fn naked_query(db: &Arc<Graph>, me: Identity, query: String) -> NeoResult<RowStream> {
-        if me.auth != Authority::Admin {
-            return Err(neo4rs::Error::AuthenticationError(
-                "Remove this".to_string(),
-            ));
-        }
-        db.execute(Query::new(query)).await
-    }
-
+    /// Deletes subscription
     pub async fn unsubscribe(db: &Arc<Graph>, me: String, topic: String) -> NeoResult<()> {
         db.run(
             Query::new(Self::read_query("unsubscribe"))
@@ -213,6 +137,7 @@ impl Database {
         .await?;
         Ok(())
     }
+
     /// Admin-only, again.
     pub async fn kill_service(db: &Arc<Graph>, id: String) -> NeoResult<()> {
         db.run(Query::new(Self::read_query("kill_service")).param("id", id))
@@ -270,7 +195,7 @@ impl Database {
         db: &Arc<Graph>,
         serv: models::Service,
         page: models::Frame,
-    ) -> Result<models::Page, neo4rs::Error> {
+    ) -> NeoResult<models::Page> {
         let mut rs = db
             .execute(
                 Query::new(Self::read_query("publish"))
@@ -293,6 +218,44 @@ impl Database {
             },
             time: entry.get("time").unwrap(),
         })
+        // todo!()
+    }
+
+    /// Might set a limit on this, either hard or timestamp-based.
+    /// Returns everything ever published to a topic (after checking if you've subscribed).
+    pub async fn get_book(
+        db: &Arc<Graph>,
+        me: String,
+        topic: String,
+    ) -> NeoResult<Vec<models::Page>> {
+        let mut rs = db
+            .execute(
+                Query::new(Self::read_query("is_subbed"))
+                    .param("tname", topic.clone())
+                    .param("me", me.clone()),
+            )
+            .await?;
+        let row = rs.next().await?.unwrap().get::<i64>("c").unwrap();
+        if row == 0 {
+            return Err(neo4rs::Error::AuthenticationError(
+                "Not subscribed to topic.".to_string(),
+            ));
+        }
+        let mut rs = db
+            .execute(Query::new(Self::read_query("get_book")).param("tname", topic))
+            .await?;
+        let mut out = vec![];
+        while let Ok(Some(entry)) = rs.next().await {
+            out.push(models::Page {
+                id: entry.get("id").unwrap(),
+                body: models::Frame {
+                    title: entry.get("title").unwrap(),
+                    body: entry.get("body").unwrap(),
+                },
+                time: entry.get("time").unwrap(),
+            })
+        }
+        Ok(out)
         // todo!()
     }
 }

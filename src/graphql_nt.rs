@@ -2,11 +2,7 @@ use std::pin::Pin;
 
 use async_graphql::{Context, FieldError, FieldResult, Object, Subscription};
 
-use crate::{
-    auth_nt::{Authority, Identity},
-    neo_nt::Database,
-    State,
-};
+use crate::{auth_nt::models::*, neo_nt::handlers::Database, State};
 
 // Big three
 

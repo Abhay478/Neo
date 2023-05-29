@@ -13,4 +13,5 @@
   - Can add several more functionalities.
 
 # Schema so far
-- ```(: Account) -[: follows]-> (: Topic) <-[: serves]- (: Service)```
+- ```(: Account) -[: follows]-> (: Topic) <-[: serves]- (: Service) ```
+- ```(: Topic) -[: contains]-> (: Page)```

@@ -1,2 +1,2 @@
-match (q: Page) <-[: contains]- (t: Topic {name: $tname})
-return q
+match (out: Page) <-[: contains]- (t: Topic {name: $tname})
+return out

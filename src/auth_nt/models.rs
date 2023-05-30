@@ -20,7 +20,7 @@ pub struct User {
 pub enum Authority {
     Unknown,
     Subscriber,
-    Service,
+    ServiceProvider,
     Admin,
 }
 
@@ -30,7 +30,7 @@ impl From<&str> for Authority {
         match s {
             "Subscriber" => Self::Subscriber,
             "Admin" => Self::Admin,
-            "Service" => Self::Service,
+            "Service" => Self::ServiceProvider,
             _ => Self::Unknown,
         }
     }
@@ -40,7 +40,7 @@ impl Display for Authority {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             Self::Admin => write!(f, "Admin"),
-            Self::Service => write!(f, "Service"),
+            Self::ServiceProvider => write!(f, "Service"),
             Self::Subscriber => write!(f, "Subscriber"),
             Self::Unknown => write!(f, "Unknown"),
         }

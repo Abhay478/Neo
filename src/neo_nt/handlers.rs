@@ -1,7 +1,7 @@
 use super::*;
 
 /// Application specific
-pub struct Database;
+pub struct Database {}
 
 /// To write a new application, just comment this impl out.
 type NeoResult<T> = Result<T, neo4rs::Error>;
@@ -27,20 +27,20 @@ impl Database {
     }
 
     /// Creates a new service.
-    /// Called only by Admin. Redundant arg performs dev-time check.
+    /// Called only by ServiceProvider. Redundant arg performs dev-time check.
     pub async fn new_service(
         db: &Arc<Graph>,
-        me: Identity,
+        // me: Identity,
         typ: models::ServiceType,
         // topic name
         topic: String,
     ) -> NeoResult<self::models::Service> {
         // --
-        if me.auth != Authority::Admin {
-            return Err(neo4rs::Error::AuthenticationError(
-                "Remove this".to_string(),
-            ));
-        }
+        // if me.auth != Authority::Admin {
+        //     return Err(neo4rs::Error::AuthenticationError(
+        //         "Remove this".to_string(),
+        //     ));
+        // }
         // --
         let mut rs = db
             .execute(
@@ -56,44 +56,30 @@ impl Database {
         Ok(self::models::Service {
             id: x.nodes()[0].get("id").unwrap(),
             typ: (&*x.rels()[0].get::<String>("type").unwrap()).into(),
-            topic: models::Topic {
-                id: x.nodes()[1].get("id").unwrap(),
-                name: x.nodes()[1].get("name").unwrap(),
-            },
+            topic: x.nodes()[0].get("topic").unwrap(),
         })
     }
 
     /// Create a new subscription to the given topic
     pub async fn subscribe_to(
         db: &Arc<Graph>,
-        me: Identity, // change to String.
+        me: String,
         topic: String,
-    ) -> NeoResult<models::Subscription> {
-        // --
-        if me.auth != Authority::Subscriber {
-            return Err(neo4rs::Error::AuthenticationError(
-                "Remove later.".to_string(),
-            ));
-        }
-        let me = me.user_id;
-        // --
+    ) -> NeoResult<models::FollowRequest> {
         let mut rs = db
             .execute(
                 Query::new(Self::read_query("subscribe_to"))
                     .param("me", me.clone())
-                    .param("this", topic.clone())
+                    .param("tname", topic.clone())
                     .param("id", uuid::Uuid::new_v4().to_string())
                     .param("from", chrono::offset::Utc::now().to_string()),
             )
             .await?;
         let row = rs.next().await?.unwrap();
         let out = row.get::<Path>("out").unwrap();
-        Ok(models::Subscription {
-            id: out.rels()[0].get("id").unwrap(),
-            topic: models::Topic {
-                id: out.nodes()[1].get("id").unwrap(),
-                name: out.nodes()[1].get("name").unwrap(),
-            },
+        Ok(models::FollowRequest {
+            id: out.rels()[0].get("sub_id").unwrap(),
+            topic: out.rels()[0].get("topic").unwrap(),
             user: me,
         })
     }
@@ -121,21 +107,18 @@ impl Database {
 
         let row = rs.next().await?.unwrap();
         let x = row.get::<Path>("t").unwrap();
-        Ok(models::Topic {
-            id: x.nodes()[0].get("id").unwrap(),
-            name: x.nodes()[0].get("name").unwrap(),
-        })
+        Ok(Extractor::topic(&x.nodes()[0]))
     }
 
     /// Deletes subscription
-    pub async fn unsubscribe(db: &Arc<Graph>, me: String, topic: String) -> NeoResult<()> {
-        db.run(
+    pub async fn unsubscribe(db: &Arc<Graph>, me: String, topic: String) -> NeoResult<bool> {
+        let mut rs = db.execute(
             Query::new(Self::read_query("unsubscribe"))
                 .param("me", me)
                 .param("tname", topic),
         )
         .await?;
-        Ok(())
+        Ok(!rs.next().await?.unwrap().get::<i64>("c").unwrap() == 0)
     }
 
     /// Admin-only, again.
@@ -162,10 +145,7 @@ impl Database {
         let mut out = vec![];
         while let Ok(Some(row)) = rs.next().await {
             let node = row.get::<Node>("t").unwrap();
-            out.push(models::Topic {
-                id: node.get("id").unwrap(),
-                name: node.get("name").unwrap(),
-            });
+            out.push(Extractor::topic(&node));
         }
 
         Ok(out)
@@ -190,7 +170,7 @@ impl Database {
         // todo!()
     }
 
-    /// New Authority called Service, let those login too, and call this function to post to a topic.
+    /// New Authority called ServiceProvider, let those login too, and call this function to post to a topic.
     pub async fn publish(
         db: &Arc<Graph>,
         serv: models::Service,
@@ -203,25 +183,19 @@ impl Database {
                     .param("title", page.title)
                     .param("pid", uuid::Uuid::new_v4().to_string())
                     .param("body", page.body)
-                    .param("time", chrono::offset::Utc::now().to_string()),
+                    .param("time", chrono::offset::Utc::now().to_string())
+                    .param("tname", serv.topic.clone()),
             )
             .await?;
 
         let row = rs.next().await?.unwrap();
         let x = row.get::<Path>("x").unwrap();
         let entry = &x.nodes()[0];
-        Ok(models::Page {
-            id: entry.get("id").unwrap(),
-            body: models::Frame {
-                title: entry.get("title").unwrap(),
-                body: entry.get("body").unwrap(),
-            },
-            time: entry.get("time").unwrap(),
-        })
+        Ok(Extractor::page(entry))
         // todo!()
     }
 
-    /// Might set a limit on this, either hard or timestamp-based.
+    /// Might set a limit on this, either hard or timestamp-based - going to be in the cypher, so rust won't change.
     /// Returns everything ever published to a topic (after checking if you've subscribed).
     pub async fn get_book(
         db: &Arc<Graph>,
@@ -246,16 +220,62 @@ impl Database {
             .await?;
         let mut out = vec![];
         while let Ok(Some(entry)) = rs.next().await {
-            out.push(models::Page {
-                id: entry.get("id").unwrap(),
-                body: models::Frame {
-                    title: entry.get("title").unwrap(),
-                    body: entry.get("body").unwrap(),
-                },
-                time: entry.get("time").unwrap(),
-            })
+            out.push(Extractor::page(&entry.get::<Node>("out").unwrap()))
         }
         Ok(out)
         // todo!()
+    }
+
+    /// Returns a vec of topics whose names start with `prefix`.
+    pub async fn search_topic_by_name(
+        db: &Arc<Graph>,
+        prefix: String,
+    ) -> NeoResult<Vec<models::Topic>> {
+        let mut rs = db
+            .execute(Query::new(Self::read_query("search_topic_by_name")).param("prefix", prefix))
+            .await?;
+        let mut out = vec![];
+        while let Ok(Some(x)) = rs.next().await {
+            out.push(Extractor::topic(&x.get("t").unwrap()))
+        }
+        todo!()
+    }
+}
+
+struct Extractor {}
+
+impl Extractor {
+    fn topic(x: &Node) -> models::Topic {
+        models::Topic {
+            id: x.get("id").unwrap(),
+            info: Self::info(x),
+            name: x.get("name").unwrap(),
+        }
+    }
+
+    /// .
+    fn info(x: &Node) -> models::TopicInfo {
+        models::TopicInfo {
+            pages: x.get("pages").unwrap(),
+            subs: x.get("subs").unwrap(),
+            time: x.get("time").unwrap(),
+            desc: x.get("desc").unwrap(),
+        }
+    }
+
+    fn page(x: &Node) -> models::Page {
+        models::Page {
+            id: x.get("id").unwrap(),
+            body: Self::frame(x),
+            time: x.get("time").unwrap(),
+            by: x.get("by").unwrap()
+        }
+    }
+
+    fn frame(x: &Node) -> models::Frame {
+        models::Frame {
+            title: x.get("title").unwrap(),
+            body: x.get("body").unwrap(),
+        }
     }
 }

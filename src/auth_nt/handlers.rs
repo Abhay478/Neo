@@ -71,7 +71,7 @@ pub async fn get_account(
         Some(row) => {
             let x = row.get::<Node>("a").unwrap();
             Ok(models::Account {
-                obj: x.get("obj").unwrap(),
+                obj: x.get("id").unwrap(),
                 creds: models::Creds {
                     username: x.get("username").unwrap(),
                     password: x.get("password").unwrap(),

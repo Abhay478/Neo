@@ -1,9 +1,12 @@
 match (t: Topic {name: $tname}) 
+match (me: Account {id: $me}) // is a service provider or admin, checked in server.
 create x = 
-    (s: Service {id: $sid}) -[: serves {
-        type: 'eh', 
-        service: s.id, 
-        topic: t.id
+    (me) -[: provides]-> (s: Service {
+        id: $sid, 
+        by: $me
+        typ: $typ
+    }) -[: serves {
+        serv:   s.id, 
+        topic:  t.id
     }]-> (t) 
 return x
-// will add a type enum.

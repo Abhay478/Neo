@@ -1,6 +1,7 @@
 match (t: Topic {name: $tname})
+match (s: Service {id: $sid})
 create x = 
-    (p: Page {
+    (s) -[: wrote]-> (p: Page {
         id:     $pid,
         title:  $title,
         body:   $body,

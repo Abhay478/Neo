@@ -15,20 +15,7 @@ pub struct Subscription;
 
 use crate::neo_nt::models::*;
 // mod models {
-//     use async_graphql::{InputObject, SimpleObject};
-//     use crate::neo_nt::models::Page;
-
-//     use super::*;
-
-//     #[derive(SimpleObject, Clone)]
-//     pub struct TopicList {
-//         pub fd: Vec<Topic>,
-//     }
-
-//     #[derive(SimpleObject, Clone)]
-//     pub struct Book {
-//         pub fd: Vec<Page>,
-//     }
+//     
 // }
 
 #[Object]
@@ -103,6 +90,8 @@ impl Query {
         }
         // todo!()
     }
+
+    // pub async fn services(&self, ctx)
 }
 
 #[Object]
@@ -144,8 +133,7 @@ impl Mutation {
 
         let me = &ctx.data_unchecked::<Identity>().user_id;
         if let Some(state) = ctx.data_opt::<State>() {
-            let r = Database::unsubscribe(&state.graph, me.clone(), topic)
-                .await?;
+            let r = Database::unsubscribe(&state.graph, me.clone(), topic).await?;
             return Ok(r);
         } else {
             panic!("Database not in context.");
@@ -154,7 +142,12 @@ impl Mutation {
         // todo!()
     }
 
-    async fn start_service(&self, ctx: &Context<'_>, topic: String, typ: String) -> FieldResult<Service> {
+    async fn start_service(
+        &self,
+        ctx: &Context<'_>,
+        topic: String,
+        typ: String,
+    ) -> FieldResult<Service> {
         if let Some(me) = ctx.data_opt::<Identity>() {
             if me.auth != Authority::ServiceProvider {
                 return Err(FieldError::new("Unauthorized"));
@@ -163,10 +156,10 @@ impl Mutation {
             panic!("Identity not in Context.");
         }
 
-        // let me = &ctx.data_unchecked::<Identity>().user_id;
+        let me = &ctx.data_unchecked::<Identity>().user_id;
         if let Some(state) = ctx.data_opt::<State>() {
-            let r = Database::new_service(&state.graph, typ.as_str().into(), topic)
-                .await?;
+            let r =
+                Database::new_service(&state.graph, me.clone(), typ.as_str().into(), topic).await?;
             return Ok(r);
         } else {
             panic!("Database not in context.");
@@ -174,10 +167,10 @@ impl Mutation {
         // todo!()
     }
 
-    /// `Service` struct must be stored by the ServiceProvider. `Frame` is the actual data. 
-    async fn publish(&self, ctx: &Context<'_>, serv: Service, fr: Frame) -> FieldResult<Page>{
+    /// `Service` struct must be stored by the ServiceProvider. `Frame` is the actual data.
+    async fn publish(&self, ctx: &Context<'_>, serv: Service, fr: Page) -> FieldResult<Frame> {
         if let Some(me) = ctx.data_opt::<Identity>() {
-            if me.auth != Authority::ServiceProvider {
+            if me.auth != Authority::ServiceProvider && me.auth != Authority::Admin {
                 return Err(FieldError::new("Unauthorized"));
             }
         } else {
@@ -186,8 +179,25 @@ impl Mutation {
 
         // let me = &ctx.data_unchecked::<Identity>().user_id;
         if let Some(state) = ctx.data_opt::<State>() {
-            let r = Database::publish(&state.graph, serv, fr)
-                .await?;
+            let r = Database::publish(&state.graph, serv, fr).await?;
+            return Ok(r);
+        } else {
+            panic!("Database not in context.");
+        }
+    }
+
+    pub async fn create_topic(&self, ctx: &Context<'_>, name: String, description: String) -> FieldResult<Topic> {
+        if let Some(me) = ctx.data_opt::<Identity>() {
+            if me.auth != Authority::ServiceProvider && me.auth != Authority::Admin {
+                return Err(FieldError::new("Unauthorized"));
+            }
+        } else {
+            panic!("Identity not in Context.");
+        }
+
+        let me = &ctx.data_unchecked::<Identity>().user_id;
+        if let Some(state) = ctx.data_opt::<State>() {
+            let r = Database::new_topic(&state.graph, me.clone(), name, description).await?;
             return Ok(r);
         } else {
             panic!("Database not in context.");

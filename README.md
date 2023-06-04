@@ -1,7 +1,7 @@
 # Stuff
 - The `main.rs` and `auth_nt` are pretty much good to go. Entire stack is built.
   - We could add new `Authorities` should the need arise.
-  - Possible parameter tweaking
+  - Possible parameter tweaking (cookie expiry).
 - The `actix_nt.rs` file is basically empty. 
   - Will add a `graphql` endpoint, accepting `Queries`, `Mutations` and `Subscriptions`. 
   - This is mostly from the `async-graphql` and `async-graphql-actix-web` crates.
@@ -15,3 +15,4 @@
 # Schema so far
 - ```(: Account) -[: follows]-> (: Topic) <-[: serves]- (: Service) ```
 - ```(: Topic) -[: contains]-> (: Page)```
+- ```(: Account) -[: provides]-> (: Service)```

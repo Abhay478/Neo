@@ -1,20 +1,21 @@
 use super::*;
 use std::fmt::Display;
 
-use async_graphql::{SimpleObject, InputObject, Enum};
+use async_graphql::{Enum, InputObject, SimpleObject};
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, SimpleObject)]
-pub struct Page {
+pub struct Frame {
     pub id: String,
-    pub body: Frame,
+    pub body: Page,
     pub time: String,
-    pub by: String,
+    pub by: String, // the service that wrote it.
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, SimpleObject, InputObject)]
+#[graphql(input_name = "InputPage")]
 /// Add more fields?
-pub struct Frame {
+pub struct Page {
     pub title: String,
     pub body: String,
 }
@@ -63,10 +64,11 @@ impl Display for ServiceType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, SimpleObject, InputObject)]
+#[graphql(input_name = "InputService")]
 pub struct Service {
     pub id: String, // uuid
     pub typ: ServiceType,
-    pub topic: String, 
+    pub topic: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, SimpleObject)]
@@ -84,4 +86,9 @@ pub struct TopicList {
 #[derive(SimpleObject, Clone)]
 pub struct Book {
     pub fd: Vec<Page>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct Album {
+    pub fd: Vec<Frame>,
 }

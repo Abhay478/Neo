@@ -9,7 +9,6 @@ use actix_web::{
 
 use async_graphql::{http::GraphiQLSource, Schema};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
-// use juniper_graphql_ws::ConnectionConfig;
 
 use crate::{
     auth_nt::models::Identity,
@@ -28,6 +27,7 @@ async fn playground(_: Identity) -> impl Responder {
 }
 
 #[post("/gql")]
+/// Chillin
 async fn graphql(req: GraphQLRequest, schema: web::Data<Sch>, me: Identity) -> impl Responder {
     HttpResponse::Ok().json(schema.execute(req.into_inner().data(me)).await)
 }

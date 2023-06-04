@@ -1,3 +1,4 @@
+use actix_nt::*;
 use actix_web::middleware::{Compress, Logger};
 use actix_web::web::Data;
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
@@ -90,6 +91,7 @@ async fn main() -> io::Result<()> {
             .service(register)
             .service(login)
             .service(logout)
+            .service(graphql)
     })
     .bind("localhost:8080")?
     .run()

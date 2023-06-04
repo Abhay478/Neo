@@ -8,4 +8,5 @@ create x =
         time:   $time,
         by:     $sid
     }) <-[: contains]- (t)
+set t.pages = t.pages + 1
 return x

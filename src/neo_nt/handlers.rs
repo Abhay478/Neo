@@ -46,7 +46,7 @@ impl Database {
 
         let r = rs.next().await?.unwrap();
         let x = r.get::<Path>("x").unwrap();
-        Ok(Extractor::service(&x.nodes()[0]))
+        Ok(Extractor::service(&x.nodes()[1]))
     }
 
     /// Create a new subscription to the given topic
@@ -65,7 +65,7 @@ impl Database {
             )
             .await?;
         let row = rs.next().await?.unwrap();
-        let out = row.get::<Path>("out").unwrap();
+        let out = row.get::<Path>("x").unwrap();
         Ok(models::FollowRequest {
             id: out.rels()[0].get("sub_id").unwrap(),
             topic: out.rels()[0].get("topic").unwrap(),
@@ -92,8 +92,8 @@ impl Database {
             .await?;
 
         let row = rs.next().await?.unwrap();
-        let x = row.get::<Path>("t").unwrap();
-        Ok(Extractor::topic(&x.nodes()[0]))
+        let x = row.get::<Node>("t").unwrap();
+        Ok(Extractor::topic(&x))
     }
 
     /// Deletes subscription
@@ -193,8 +193,8 @@ impl Database {
 
         let row = rs.next().await?.unwrap();
         let x = row.get::<Path>("x").unwrap();
-        let entry = &x.nodes()[0];
-        Ok(Extractor::page(entry))
+        let entry = &x.nodes()[1];
+        Ok(Extractor::frame(entry))
         // todo!()
     }
 
@@ -229,7 +229,7 @@ impl Database {
             .await?;
         let mut out = vec![];
         while let Ok(Some(entry)) = rs.next().await {
-            out.push(Extractor::frame(&entry.get("out").unwrap()))
+            out.push(Extractor::page(&entry.get("out").unwrap()))
         }
         Ok(out)
         // todo!()
@@ -283,16 +283,16 @@ impl Extractor {
         }
     }
 
-    fn page(x: &Node) -> models::Frame {
+    fn frame(x: &Node) -> models::Frame {
         models::Frame {
             id: x.get("id").unwrap(),
-            body: Self::frame(x),
+            body: Self::page(x),
             time: x.get("time").unwrap(),
             by: x.get("by").unwrap(),
         }
     }
 
-    fn frame(x: &Node) -> models::Page {
+    fn page(x: &Node) -> models::Page {
         models::Page {
             title: x.get("title").unwrap(),
             body: x.get("body").unwrap(),

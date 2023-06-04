@@ -4,7 +4,7 @@ create (t: Topic {
     pages:  0,
     subs:   0, // subscriber count
     time:   $time, // of creation
-    desc:   $description,
+    desc:   $desc,
     owner:  $me
 })
 return t

@@ -125,3 +125,9 @@ pub struct Creds {
     pub disp_name: String,
     pub auth: models::Authority,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Kernel {
+    pub username: String,
+    pub password: String
+}

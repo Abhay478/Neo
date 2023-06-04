@@ -7,7 +7,7 @@ pub async fn dupe_acc(db: &Arc<Graph>, uu: &str) -> bool {
     match c {
         Ok(mut rs) => {
             let row = rs.next().await.unwrap();
-            dbg!(&row);
+            // dbg!(&row);
             row.unwrap().get::<i64>("count").unwrap() != 0
         }
         Err(e) => {
@@ -39,7 +39,7 @@ pub async fn makeme(db: &Arc<Graph>, new: models::Creds) -> Result<models::Accou
         .await?;
 
     let rs = c.next().await?;
-    dbg!(&rs);
+    // dbg!(&rs);
     match rs {
         Some(cr) => {
             let x = &cr.get::<Path>("x").unwrap().nodes()[0];
@@ -97,6 +97,10 @@ pub async fn register(
             .json(serde_json::json!({"status": "fail","message": "Doppleganger alert."}));
     }
 
+    if body.auth == models::Authority::Admin {
+        return HttpResponse::Unauthorized().body("Cannot be admin.");
+    }
+
     // Empty password means set to username.
     if body.password == "" {
         body.password = body.username.clone();
@@ -140,7 +144,7 @@ fn get_token(id: &str, data: web::Data<State>, auth: models::Authority) -> Strin
 }
 
 #[post("/auth/login")]
-pub async fn login(body: web::Json<models::Creds>, data: web::Data<State>) -> impl Responder {
+pub async fn login(body: web::Json<models::Kernel>, data: web::Data<State>) -> impl Responder {
     let db = &data.graph;
 
     let query_result = get_account(db, &*body.username).await;
@@ -173,7 +177,7 @@ pub async fn login(body: web::Json<models::Creds>, data: web::Data<State>) -> im
 
     let cookie = Cookie::build("token", token.to_owned())
         .path("/")
-        .max_age(AWD::new(60 * 60, 0))
+        .max_age(AWD::new(864000, 0))
         .http_only(true)
         .finish();
 

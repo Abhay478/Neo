@@ -1,6 +1,6 @@
 match (s: Service {
         id: $id,
-        by: $me
+        by: $me // Ensures that it is indeed your service. If it isn't, silently fails.
     })
 
 // Unhook from topic
@@ -15,7 +15,10 @@ delete r
 
 // Unhook pages.
 match (s) -[w: wrote]-> (p: Page)
-set p.by = null // service terminated
+set p.by = null // service terminated, pages just floating around. Will die with topic
 delete w
+
+match (s) <-[r: provides]- (a: Account)
+delete r
 
 delete s

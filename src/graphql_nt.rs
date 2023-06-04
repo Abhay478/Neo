@@ -112,8 +112,7 @@ impl Mutation {
         let me = &ctx.data_unchecked::<Identity>().user_id;
         if let Some(state) = ctx.data_opt::<State>() {
             let r = Database::subscribe_to(&state.graph, me.clone(), topic)
-                .await
-                .unwrap();
+                .await?;
             return Ok(r);
         } else {
             panic!("Database not in context.");
@@ -167,7 +166,7 @@ impl Mutation {
         // todo!()
     }
 
-    /// `Service` struct must be stored by the ServiceProvider. `Frame` is the actual data.
+    /// `Service` struct must be stored by the ServiceProvider. `Page` is the actual data.
     async fn publish(&self, ctx: &Context<'_>, serv: Service, fr: Page) -> FieldResult<Frame> {
         if let Some(me) = ctx.data_opt::<Identity>() {
             if me.auth != Authority::ServiceProvider && me.auth != Authority::Admin {
@@ -186,7 +185,7 @@ impl Mutation {
         }
     }
 
-    pub async fn create_topic(&self, ctx: &Context<'_>, name: String, description: String) -> FieldResult<Topic> {
+    pub async fn create_topic(&self, ctx: &Context<'_>, name: String, des: String) -> FieldResult<Topic> {
         if let Some(me) = ctx.data_opt::<Identity>() {
             if me.auth != Authority::ServiceProvider && me.auth != Authority::Admin {
                 return Err(FieldError::new("Unauthorized"));
@@ -197,14 +196,31 @@ impl Mutation {
 
         let me = &ctx.data_unchecked::<Identity>().user_id;
         if let Some(state) = ctx.data_opt::<State>() {
-            let r = Database::new_topic(&state.graph, me.clone(), name, description).await?;
+            let r = Database::new_topic(&state.graph, me.clone(), name, des).await?;
             return Ok(r);
         } else {
             panic!("Database not in context.");
         }
     }
 
+    pub async fn terminate_service(&self, ctx: &Context<'_>, sid: String) -> FieldResult<bool> {
+        if let Some(me) = ctx.data_opt::<Identity>() {
+            if me.auth != Authority::ServiceProvider && me.auth != Authority::Admin {
+                return Err(FieldError::new("Unauthorized"));
+            }
+        } else {
+            panic!("Identity not in Context.");
+        }
 
+        let me = &ctx.data_unchecked::<Identity>().user_id;
+        if let Some(state) = ctx.data_opt::<State>() {
+            Database::kill_service(&state.graph, sid, me.clone()).await?;
+            return Ok(true);
+        } else {
+            panic!("Database not in context.");
+        }
+        // todo!()
+    }
 }
 
 /// This is a test type.

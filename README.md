@@ -7,7 +7,7 @@
   - This is mostly from the `async-graphql` and `async-graphql-actix-web` crates.
   - Still a little iffy on the mechanics.
 - Added a `graphql_nt.rs` file, with structs for `Queries`, `Mutations` and `Subscriptions`.
-  - These structs will have functions that call the functions in `neo_nt.rs`.
+  - These structs will have functions that call the functions in `neo_nt/handlers.rs`.
   - Authorization verification occurs here (only).
   - This is the actual server.
 - `neo_nt` is the neo4j part, off to a good start. All structs in `models.rs`, all functions in `handlers.rs` (looking a little bloated, might change).

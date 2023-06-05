@@ -203,7 +203,7 @@ impl Mutation {
         }
     }
 
-    pub async fn terminate_service(&self, ctx: &Context<'_>, sid: String) -> FieldResult<bool> {
+    pub async fn kill_service(&self, ctx: &Context<'_>, sid: String) -> FieldResult<bool> {
         if let Some(me) = ctx.data_opt::<Identity>() {
             if me.auth != Authority::ServiceProvider && me.auth != Authority::Admin {
                 return Err(FieldError::new("Unauthorized"));
@@ -214,12 +214,28 @@ impl Mutation {
 
         let me = &ctx.data_unchecked::<Identity>().user_id;
         if let Some(state) = ctx.data_opt::<State>() {
-            Database::kill_service(&state.graph, sid, me.clone()).await?;
-            return Ok(true);
+            return Ok(Database::kill_service(&state.graph, sid, me.clone()).await?);
         } else {
             panic!("Database not in context.");
         }
         // todo!()
+    }
+
+    pub async fn retire_topic(&self, ctx: &Context<'_>, topic: String) -> FieldResult<bool> {
+        if let Some(me) = ctx.data_opt::<Identity>() {
+            if me.auth != Authority::ServiceProvider && me.auth != Authority::Admin {
+                return Err(FieldError::new("Unauthorized"));
+            }
+        } else {
+            panic!("Identity not in Context.");
+        }
+
+        let me = &ctx.data_unchecked::<Identity>().user_id;
+        if let Some(state) = ctx.data_opt::<State>() {
+            return Ok(Database::retire_topic(&state.graph, topic, me.clone()).await?);
+        } else {
+            panic!("Database not in context.");
+        }
     }
 }
 

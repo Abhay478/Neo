@@ -9,6 +9,7 @@ match (s: Service) -[r]-> (t)
 delete r // Unhook services
 
 // Find pages
+with t
 match (t) -[u]-> (p: Page)
 delete u // Unhook pages
 

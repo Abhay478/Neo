@@ -109,25 +109,25 @@ impl Database {
     }
 
     /// Admin-only, or proper Service Provider.
-    pub async fn kill_service(db: &Arc<Graph>, id: String, me: String) -> NeoResult<()> {
-        db.run(
+    pub async fn kill_service(db: &Arc<Graph>, id: String, me: String) -> NeoResult<bool> {
+        let mut rs = db.execute(
             Query::new(Self::read_query("kill_service"))
                 .param("id", id)
                 .param("me", me),
         )
         .await?;
-        Ok(())
+        Ok(rs.next().await?.unwrap().get("out").unwrap())
     }
 
     /// Admin-only, again.
-    pub async fn retire_topic(db: &Arc<Graph>, topic: String, me: String) -> NeoResult<()> {
-        db.run(
+    pub async fn retire_topic(db: &Arc<Graph>, topic: String, me: String) -> NeoResult<bool> {
+        let mut rs = db.execute(
             Query::new(Self::read_query("retire_topic"))
                 .param("id", topic)
                 .param("me", me),
         )
         .await?;
-        Ok(())
+        Ok(rs.next().await?.unwrap().get("out").unwrap())
     }
 
     /// Returns all the topics you're subscribed to. FollowRequest types be?
